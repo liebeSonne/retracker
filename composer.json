@@ -1,4 +1,14 @@
 {
     "name": "liebesonne/retracker",
-    "description" : "retracker.local on PHP"
+    "description" : "retracker.local on PHP",
+    "require-dev": {
+        "phpcompatibility/php-compatibility": "*"
+    },
+    "prefer-stable" : true,
+    "scripts": {
+        "post-install-cmd": "./vendor/bin/phpcs --config-set installed_paths vendor/phpcompatibility/php-compatibility",
+        "post-update-cmd" : "./vendor/bin/phpcs --config-set installed_paths vendor/phpcompatibility/php-compatibility",
+        "inspect": "./vendor/bin/phpcs -p ./*.php --standard=PHPCompatibility",
+        "inspect-php7": "./vendor/bin/phpcs -p ./*.php --standard=PHPCompatibility --runtime-set testVersion 7.0"
+    }
 }
