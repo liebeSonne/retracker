@@ -21,24 +21,24 @@ $tr_cfg['tr_db_type'] = 'mysql';                   // Available db types: sqlite
 
 // DB - MySQL
 $tr_cfg['tr_db']['mysql'] = array(
-	'dbhost'   => 'localhost',
-	'dbuser'   => '',
-	'dbpasswd' => '',
-	'dbname'   => '',
-	'pconnect' => false,
-	'log_name' => 'MySQL',
+    'dbhost'   => 'localhost',
+    'dbuser'   => '',
+    'dbpasswd' => '',
+    'dbname'   => '',
+    'pconnect' => false,
+    'log_name' => 'MySQL',
 );
 
 // DB - SQLite
 $tr_cfg['tr_db']['sqlite'] = array(
-	'db_file_path' => '/dev/shm/tr.db.sqlite',       // preferable on tmpfs
+    'db_file_path' => '/dev/shm/tr.db.sqlite',       // preferable on tmpfs
 );
 
 // Cache
 $tr_cfg['tr_cache_type'] = 'none';                 // Available cache types: none, sqlite
 
 $tr_cfg['tr_cache']['sqlite'] = array(
-	'db_file_path' => '/dev/shm/tr.cache.sqlite',    // preferable on tmpfs
+    'db_file_path' => '/dev/shm/tr.cache.sqlite',    // preferable on tmpfs
 );
 
 define('PEERS_LIST_PREFIX', '');
