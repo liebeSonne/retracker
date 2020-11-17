@@ -471,7 +471,7 @@ class sqlite_common
 
     function get_error_msg ()
     {
-        return 'SQLite error #'. ($err_code = $this->dbh->errorCode()) .': '. $this->dbh->errorInfo();
+        return 'SQLite error #'. ($err_code = $this->dbh->lastErrorCode()) .': '. $this->dbh->lastErrorMsg();
     }
 
     function trigger_error ($msg = 'DB Error')
