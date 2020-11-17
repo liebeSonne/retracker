@@ -1,7 +1,6 @@
 <?php
 
 error_reporting(E_ALL);                            // Set php error reporting mode
-set_magic_quotes_runtime(0);                       // Disable magic_quotes_runtime
 
 // Tracker config
 $tr_cfg = array();

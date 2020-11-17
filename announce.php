@@ -322,7 +322,7 @@ class cache_sqlite extends cache_common
                   'log_name'     => 'CACHE',
                 );
 
-    function cache_sqlite ($cfg)
+    function __construct($cfg)
     {
         $this->cfg = array_merge($this->cfg, $cfg);
         $this->db = new sqlite_common($this->cfg);
@@ -333,19 +333,21 @@ class cache_sqlite extends cache_common
         $result = $this->db->query("
             SELECT cache_value
             FROM ". $this->cfg['table_name'] ."
-            WHERE cache_name = '". sqlite_escape_string($name) ."'
+            WHERE cache_name = '". SQLite3::escapeString($name) ."'
                 AND cache_expire_time > ". TIMENOW ."
             LIMIT 1
         ");
 
-        return ($result AND $cache_value = sqlite_fetch_single($result)) ? unserialize($cache_value) : false;
+        $row = $result->fetchArray(SQLITE3_ASSOC);
+        $cache_value = $row ? $row['cache_value'] : '';
+        return ($result AND $cache_value) ? unserialize($cache_value) : false;
     }
 
     function set ($name, $value, $ttl = 86400)
     {
-        $name   = sqlite_escape_string($name);
+        $name   = SQLite3::escapeString($name);
         $expire = TIMENOW + $ttl;
-        $value  = sqlite_escape_string(serialize($value));
+        $value  = SQLite3::escapeString(serialize($value));
 
         $result = $this->db->query("
             REPLACE INTO ". $this->cfg['table_name'] ."
@@ -361,7 +363,7 @@ class cache_sqlite extends cache_common
     {
         $result = $this->db->query("
             DELETE FROM ". $this->cfg['table_name'] ."
-            WHERE cache_name = '". sqlite_escape_string($name) ."'
+            WHERE cache_name = '". SQLite3::escapeString($name) ."'
         ");
 
         return (bool) $result;
@@ -374,7 +376,7 @@ class cache_sqlite extends cache_common
             WHERE cache_expire_time < $expire_time
         ");
 
-        return ($result) ? sqlite_changes($this->db->dbh) : 0;
+        return ($result) ? ($this->db->dbh->changes()) : 0;
     }
 }
 
@@ -392,19 +394,22 @@ class sqlite_common
     var $table_create_attempts  = 0;
     var $random_fn              = 'random()';
 
-    function sqlite_common ($cfg)
+    function __construct($cfg)
     {
-        if (!function_exists('sqlite_open')) die('Error: Sqlite extension not installed');
+        if (!class_exists("SQLite3")) die('Error: SQLite3 extension not installed');
         $this->cfg = array_merge($this->cfg, $cfg);
     }
 
     function init ()
     {
-        $connect_fn = ($this->cfg['pconnect']) ? 'sqlite_popen' : 'sqlite_open';
+        $sqlite_error = null;
+        try {
+            $this->dbh = new SQLite3($this->cfg['db_file_path']);
+        } catch (Exception $e) {
+            $sqlite_error = $e->getMessage();
+        }
 
-        $this->dbh = @$connect_fn($this->cfg['db_file_path'], 0666, $sqlite_error);
-
-        if (!is_resource($this->dbh) && $this->cfg['con_required'])
+        if (!$this->dbh && $this->cfg['con_required'])
         {
             trigger_error($sqlite_error, E_USER_ERROR);
         }
@@ -413,7 +418,7 @@ class sqlite_common
     function create_table ()
     {
         $this->table_create_attempts++;
-        $result = sqlite_query($this->dbh, $this->cfg['table_schema']);
+        $result = $this->dbh->query($this->cfg['table_schema']);
         $msg = ($result) ? "{$this->cfg['table_name']} table created" : $this->get_error_msg();
         trigger_error($msg, E_USER_WARNING);
         return $result;
@@ -421,17 +426,15 @@ class sqlite_common
 
     function query ($query, $type = 'unbuffered')
     {
-        if (!is_resource($this->dbh)) $this->init();
+        if (!$this->dbh) $this->init();
 
-        $query_fn = ($type === 'unbuffered') ? 'sqlite_unbuffered_query' : 'sqlite_query';
-
-        if (!$result = $query_fn($this->dbh, $query, SQLITE_ASSOC))
+        if (!$result = $this->dbh->query($query))
         {
-            if (!$this->table_create_attempts && !sqlite_num_rows(sqlite_query($this->dbh, "PRAGMA table_info({$this->cfg['table_name']})")))
+            if (!$this->table_create_attempts && !$this->dbh->exec("PRAGMA table_info({$this->cfg['table_name']})"))
             {
                 if ($this->create_table())
                 {
-                    $result = $query_fn($this->dbh, $query, SQLITE_ASSOC);
+                    $result = $this->dbh->query($query);
                 }
             }
             if (!$result)
@@ -445,24 +448,30 @@ class sqlite_common
 
     function fetch_row ($query, $type = 'unbuffered')
     {
-        $result = $this->query($query, $type);
-        return is_resource($result) ? sqlite_fetch_array($result, SQLITE_ASSOC) : false;
+        $result = $this->dbh->query($query);
+        return $result ? $result->fetchArray(SQLITE3_ASSOC) : false;
     }
 
     function fetch_rowset ($query, $type = 'unbuffered')
     {
-        $result = $this->query($query, $type);
-        return is_resource($result) ? sqlite_fetch_all($result, SQLITE_ASSOC) : array();
+        $result = $this->dbh->query($query);
+        $rows = array();
+        if ($result) {
+            while($row = $result->fetchArray(SQLITE3_ASSOC)) {
+                $rows[] = $row;
+            }
+        }
+        return $rows;
     }
 
     function escape ($str)
     {
-        return sqlite_escape_string($str);
+        return SQLite3::escapeString($str);
     }
 
     function get_error_msg ()
     {
-        return 'SQLite error #'. ($err_code = sqlite_last_error($this->dbh)) .': '. sqlite_error_string($err_code);
+        return 'SQLite error #'. ($err_code = $this->dbh->errorCode()) .': '. $this->dbh->errorInfo();
     }
 
     function trigger_error ($msg = 'DB Error')
@@ -484,7 +493,7 @@ class mysql_common
     var $dbh       = null;
     var $random_fn = 'RAND()';
 
-    function mysql_common ($cfg)
+    function __construct($cfg)
     {
         $this->cfg = array_merge($this->cfg, $cfg);
     }
@@ -492,15 +501,15 @@ class mysql_common
     function init ()
     {
         // Connect
-        $connect_fn = ($this->cfg['pconnect']) ? 'mysql_pconnect' : 'mysql_connect';
-        if (@!$this->dbh = $connect_fn($this->cfg['dbhost'], $this->cfg['dbuser'], $this->cfg['dbpasswd']))
+        $dbhost = ($this->cfg['pconnect']) ? 'p:'.$this->cfg['dbhost'] : $this->cfg['dbhost'];
+        if (@!$this->dbh = mysqli_connect($dbhost, $this->cfg['dbuser'], $this->cfg['dbpasswd']))
         {
             trigger_error($this->get_error_msg(), E_USER_ERROR);
         }
         register_shutdown_function(array(&$this, 'disconnect'));
 
         // Select DB
-        if (!mysql_select_db($this->cfg['dbname'], $this->dbh))
+        if (!mysqli_select_db($this->dbh, $this->cfg['dbname']))
         {
             trigger_error($this->get_error_msg(), E_USER_ERROR);
         }
@@ -513,16 +522,20 @@ class mysql_common
 
     function disconnect ()
     {
-        if (is_resource($this->dbh)) mysql_close($this->dbh);
+        if ($this->dbh) mysqli_close($this->dbh);
         $this->dbh = $this->selected_db = null;
     }
 
     function query ($query, $type = 'unbuffered')
     {
-        if (!is_resource($this->dbh)) $this->init();
+        if (!$this->dbh) $this->init();
 
-        $query_fn = ($type === 'unbuffered') ? 'mysql_unbuffered_query' : 'mysql_query';
-        if (!$result = $query_fn($query, $this->dbh))
+        if ($type === 'unbuffered') {
+            $result = mysqli_query($this->dbh, $query, MYSQLI_USE_RESULT);
+        } else {
+            $result = mysqli_query($this->dbh, $query);
+        }
+        if (!$result)
         {
             $this->trigger_error($this->get_error_msg());
         }
@@ -532,28 +545,35 @@ class mysql_common
     function fetch_row ($query, $type = 'unbuffered')
     {
         $result = $this->query($query, $type);
-        return is_resource($result) ? mysql_fetch_array($result, MYSQL_ASSOC) : false;
+        $row = $result ? mysqli_fetch_array($result, MYSQLI_ASSOC) : false;
+        if ($result && $type === 'unbuffered') {
+            mysqli_free_result($result);
+        }
+        return $row;
     }
 
     function fetch_rowset ($query, $type = 'unbuffered')
     {
         $rowset = array();
         $result = $this->query($query, $type);
-        if (is_resource($result))
+        if ($result)
         {
-            while ($row = mysql_fetch_array($result, MYSQL_ASSOC)) $rowset[] = $row;
+            while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC)) $rowset[] = $row;
+            if ($type === 'unbuffered') {
+                mysqli_free_result($result);
+            }
         }
         return $rowset;
     }
 
     function escape ($str)
     {
-        return mysql_escape_string($str);
+        return mysqli_real_escape_string($this->dbh, $str);
     }
 
     function get_error_msg ()
     {
-        return (is_resource($this->dbh)) ? 'MySQL error #'. mysql_errno($this->dbh) .': '. mysql_error($this->dbh) : 'not connected';
+        return ($this->dbh) ? 'MySQL error #'. mysqli_errno($this->dbh) .': '. mysqli_error($this->dbh) : 'not connected';
     }
 
     function trigger_error ($msg = 'DB Error')
