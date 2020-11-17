@@ -568,6 +568,7 @@ class mysql_common
 
     function escape ($str)
     {
+        if (!$this->dbh) $this->init();
         return mysqli_real_escape_string($this->dbh, $str);
     }
 
