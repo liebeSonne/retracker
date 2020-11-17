@@ -430,11 +430,20 @@ class sqlite_common
 
         if (!$result = $this->dbh->query($query))
         {
-            if (!$this->table_create_attempts && !$this->dbh->exec("PRAGMA table_info({$this->cfg['table_name']})"))
+            if (!$this->table_create_attempts)
             {
-                if ($this->create_table())
-                {
-                    $result = $this->dbh->query($query);
+                $num = 0;
+                $rez = $this->dbh->query("PRAGMA table_info({$this->cfg['table_name']})");
+                if ($rez) {
+                    while($row = $rez->fetchArray(SQLITE3_ASSOC)) {
+                        $num++;
+                    }
+                }
+                if (!$num) {
+                    if ($this->create_table())
+                    {
+                        $result = $this->dbh->query($query);
+                    }
                 }
             }
             if (!$result)
